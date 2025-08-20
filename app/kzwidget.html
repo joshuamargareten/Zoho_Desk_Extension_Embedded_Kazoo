@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Zoho Desk - Apps</title>
+</head>
+
+<body>
+    <iframe id="pbxframe" src="" frameborder="0" style="width: 98vw; height: 96vh;"></iframe>
+    <h1 id="not-found" style="display: none; padding: 30px; text-align: center;">PBX ID Not Found</h1>
+
+    <script src="https://js.zohostatic.com/support/developer_sdk/v1/js/ZohoDeskClientSDK.min.js"></script>
+    <script src="./js/functions.js"></script>
+    <script>
+        document.addEventListener("TEKLINK_READY", async () => {
+            const frameElement = document.getElementById("pbxframe");
+            const notFound = document.getElementById("not-found");
+
+            // Helper to read a config by name (lowercase!)
+            const getCfgVal = (cfgArr, name) => (cfgArr.find(c => c.name === name) || {}).value || "";
+
+            try {
+                const cfgResp = await ZOHODESK.get("extension.config");
+                const cfgArr = cfgResp["extension.config"] || [];
+
+                // Pull current account & custom field name that stores the PBX ID
+                const acct = await TEKLINK.fetchAccount(); // may be null
+                const acctCfName = getCfgVal(cfgArr, "kazooAccountIdCf"); // the CF api name on Account that holds pbx id
+                const pbxId = acct?.cf ? acct.cf[acctCfName] : null;
+
+                // Resolve agent → kazoo user id
+                const agent = await ZOHODESK.get("user");
+                const userMapStr = getCfgVal(cfgArr, "kazooUserMap");
+                let userMap = {};
+                try { userMap = JSON.parse(userMapStr || "{}"); } catch { }
+                const kazooUserId = userMap[agent.user.id];
+
+                if (!pbxId) {
+                    notFound.style.display = 'block';
+                    frameElement.style.display = 'none';
+                    return;
+                }
+                if (!kazooUserId) {
+                    ZOHODESK.showpopup({ title: "Kazoo", content: "No Kazoo user mapped for your agent. Ask admin to set mapping in Preferences.", type: "alert", color: "blue", contentType: "html" });
+                }
+
+                // Auth as API, then impersonate user
+                const authReq = await ZOHODESK.request({
+                    url: "https://{{kazooapibase}}/v2/api_auth",
+                    headers: { "Content-Type": "application/json" },
+                    type: "PUT",
+                    postBody: { data: { api_key: "{{kazooApiKey}}" } }
+                });
+                const apiAuth = JSON.parse(JSON.parse(authReq).response).auth_token;
+
+                const userAuthReq = await ZOHODESK.request({
+                    url: `https://{{kazooapibase}}/v2/accounts/{{kazooLoginAccountId}}/users/${kazooUserId}/user_auth`,
+                    headers: { "Content-Type": "application/json", "X-Auth-Token": apiAuth },
+                    type: "PUT",
+                    postBody: { action: "impersonate_user", data: {} }
+                });
+                const userAuth = JSON.parse(JSON.parse(userAuthReq).response).auth_token;
+
+                const portalHost = getCfgVal(cfgArr, "kazooportalbase");
+                const appSlug = getCfgVal(cfgArr, "kazooAppUrl") || "dt-callflows";
+
+                // NOTE: portal base must be whitelisted and lowercase in manifest
+                const pbxUrl = `https://${portalHost}/#/apps/${appSlug}?t=${encodeURIComponent(userAuth)}&m=${encodeURIComponent(pbxId)}`;
+                frameElement.src = pbxUrl;
+
+            } catch (e) {
+                console.error("Kazoo widget init failed", e);
+                ZOHODESK.showpopup({ title: "Kazoo", content: "Failed to load Kazoo portal. See console for details.", type: "error", color: "red", contentType: "html" });
+            }
+        });
+    </script>
+
+</body>
+
+</html>

@@ -1,0 +1,125 @@
+{
+  "locale": ["en"],
+  "service": "DESK",
+  "storage": true,
+  "type": "personal",
+  "modules": {
+    "widgets": [
+      {
+        "title": "Kazoo",
+        "location": "desk.ticket.detail.subtab",
+        "url": "/app/kzwidget.html",
+        "name": "Kazoo",
+        "logo": "/app/img/icon.png",
+        "icon": "/app/img/icon.png"
+      },
+      {
+        "location": "desk.extension.preference",
+        "url": "/app/settings.html",
+        "name": "Prefernces",
+        "title": "Prefernces",
+        "icon": "/app/img/icon.png",
+        "logo": "/app/img/icon.png"
+      }
+    ]
+  },
+  "cspDomains": {
+    "connect-src": []
+  },
+  "zohoAuthorisation": {
+    "type": "connectors",
+    "connectionLinkName": "zohodesk2",
+    "connectionName": "Zoho Desk",
+    "serviceName": "zlabs_integration",
+    "userAccess": false,
+    "isUserDefinedService": false,
+    "sharedBy": "821961013",
+    "scope": [
+      "Desk.extensions.ALL",
+      "Desk.tickets.ALL",
+      "Desk.contacts.ALL",
+      "Desk.search.READ",
+      "Desk.settings.READ",
+      "Desk.custommodule.ALL"
+    ]
+  },
+  "connectors": [],
+  "config": [
+    {
+      "displayName": "Kazoo API Base URL",
+      "secure": false,
+      "type": "text",
+      "mandatory": true,
+      "userdefined": true,
+      "authType": "org",
+      "name": "kazooapibase"
+    },
+    {
+      "displayName": "Kazoo API Key",
+      "secure": true,
+      "type": "text",
+      "mandatory": true,
+      "userdefined": true,
+      "authType": "org",
+      "name": "kazooApiKey"
+    },
+    {
+      "displayName": "Kazoo Super Duper Account ID",
+      "secure": true,
+      "type": "text",
+      "mandatory": true,
+      "userdefined": true,
+      "authType": "org",
+      "name": "kazooSuperAccountId"
+    },
+    {
+      "displayName": "Account Custom Feild for Kazoo ID",
+      "secure": false,
+      "type": "text",
+      "mandatory": true,
+      "userdefined": true,
+      "authType": "org",
+      "name": "kazooAccountIdCf"
+    },
+    {
+      "displayName": "Kazoo Portal URL",
+      "secure": false,
+      "type": "text",
+      "mandatory": true,
+      "userdefined": true,
+      "authType": "org",
+      "name": "kazooportalbase"
+    },
+    {
+      "displayName": "Kazoo Portal Default App",
+      "secure": false,
+      "type": "text",
+      "mandatory": false,
+      "userdefined": true,
+      "authType": "org",
+      "name": "kazooAppUrl"
+    },
+    {
+      "secure": false,
+      "type": "text",
+      "mandatory": false,
+      "userdefined": false,
+      "authType": "org",
+      "name": "kazooLoginAccountId"
+    },
+    {
+      "secure": false,
+      "type": "text",
+      "mandatory": false,
+      "userdefined": false,
+      "authType": "org",
+      "name": "kazooUserMap"
+    }
+  ],
+  "moduleSupport": true,
+  "whiteListedDomains": [
+    "https://{{kazooapibase}}",
+    "https://{{kazooportalbase}}",
+    "https://desk.zoho.com"
+  ]
+}

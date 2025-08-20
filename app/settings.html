@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extension Config</title>
+    <link href="./css/main.css" rel="stylesheet" />
+</head>
+
+<body>
+    <section>
+        <h2>Kazoo</h2>
+
+        <label for="kzLoginAcct">Account for login (dropdown)</label>
+        <select id="kzLoginAcct"></select>
+
+        <button id="kzSaveAll">Save Account</button>
+
+        <hr>
+
+        <h3>Link Desk Agents to Kazoo Users</h3>
+        <div id="agent-mapper">Loading…</div>
+        <button id="kzSaveMapping">Save Mapping</button>
+    </section>
+
+    <script src="https://js.zohostatic.com/support/developer_sdk/v1/js/ZohoDeskClientSDK.min.js"></script>
+    <script>
+        window.onload = function () {
+          ZOHODESK.extension.onload().then(async () => {
+            const el = id => document.getElementById(id);
+        
+            // ----- Config helpers -----
+            async function getCfg() {
+              const { "extension.config": cfg } = await ZOHODESK.get("extension.config");
+              const get = (n) => (cfg.find(c => c.name === n) || {}).value || "";
+              const setMany = (pairs) => Promise.all(pairs.map(p => ZOHODESK.set("extension.config", p)));
+              return { cfg, get, setMany };
+            }
+        
+            // ----- Kazoo API helpers using config placeholders -----
+            async function kazooApiAuth() {
+              // url + postBody use placeholders resolved by Zoho at call-time
+              const r = await ZOHODESK.request({
+                url: "https://{{kazooapibase}}/v2/api_auth",
+                headers: { "Content-Type": "application/json" },
+                type: "PUT",
+                postBody: { data: { api_key: "{{kazooApiKey}}" } }
+              });
+              const outer = JSON.parse(r); const inner = JSON.parse(outer.response);
+              return inner.auth_token;
+            }
+        
+            async function listKazooAccounts(authToken) {
+              const r = await ZOHODESK.request({
+                url: "https://{{kazooapibase}}/v2/accounts/{{kazooSuperAccountId}}/descendants",
+                headers: { "Content-Type": "application/json", "X-Auth-Token": authToken },
+                type: "GET",
+                postBody: {}
+              });
+              const outer = JSON.parse(r); const inner = JSON.parse(outer.response);
+              return inner.data || [];
+            }
+        
+            async function listKazooUsers(authToken) {
+              const r = await ZOHODESK.request({
+                url: "https://{{kazooapibase}}/v2/accounts/{{kazooLoginAccountId}}/users?paginate=false",
+                headers: { "Content-Type": "application/json", "X-Auth-Token": authToken },
+                type: "GET",
+                postBody: {}
+              });
+              const outer = JSON.parse(r); const inner = JSON.parse(outer.response);
+              return inner.data || [];
+            }
+        
+            async function listDeskAgents() {
+              const { "portal.id": orgId } = await ZOHODESK.get("portal.id");
+              const r = await ZOHODESK.request({
+                url: "https://desk.zoho.com/api/v1/agents",
+                headers: { "Content-Type": "application/json" },
+                type: "GET",
+                data: { orgId },
+                connectionLinkName: "zohodesk2",
+                postBody: {}
+              });
+              const outer = JSON.parse(r); const inner = JSON.parse(outer.response);
+              return inner.statusMessage?.data || [];
+            }
+        
+            // ----- UI wiring -----
+            const ddLogin = el('kzLoginAcct');
+            const mapContainer = el('agent-mapper');
+        
+            let cfg; try {
+              cfg = await getCfg();
+            } catch (e) {
+              console.error("Failed to load extension.config", e);
+              return ZOHODESK.showpopup({ title: "Config Error", content: "Unable to read extension configuration.", type: "error", color: "red", contentType: "html" });
+            }
+        
+            // Populate accounts dropdown
+            try {
+              const token = await kazooApiAuth();
+              const accounts = await listKazooAccounts(token);
+              ddLogin.innerHTML = "";
+              accounts.forEach(a => {
+                const opt = document.createElement('option');
+                opt.value = a.id || a._id || a.account_id;
+                opt.textContent = a.name || a.account_name || opt.value;
+                ddLogin.appendChild(opt);
+              });
+              const savedLogin = cfg.get('kazooLoginAccountId');
+              if (savedLogin) ddLogin.value = savedLogin;
+            } catch (e) {
+              console.error("Kazoo accounts load failed", e);
+              ZOHODESK.showpopup({ title: "Kazoo Error", content: "Failed to load Kazoo accounts. Check API base/key and whitelist.", type: "error", color: "red", contentType: "html" });
+            }
+        
+            // Save selected login account
+            el('kzSaveAll').addEventListener('click', async () => {
+              try {
+                await ZOHODESK.set("extension.config", { name: 'kazooLoginAccountId', value: ddLogin.value });
+                ZOHODESK.showpopup({ title: "Saved", content: "Kazoo Login Account saved.", type: "alert", color: "blue", contentType: "html" });
+              } catch (e) {
+                console.error("Save kazooLoginAccountId failed", e);
+                ZOHODESK.showpopup({ title: "Save Error", content: "Could not save Kazoo Login Account.", type: "error", color: "red", contentType: "html" });
+              }
+            });
+        
+            // Build agent ↔ user mapper
+            (async () => {
+              try {
+                const loginAcct = cfg.get('kazooLoginAccountId') || ddLogin.value;
+                if (!loginAcct) { mapContainer.textContent = "Select and save a Login Account first."; return; }
+        
+                const token = await kazooApiAuth();
+                const [users, agents] = await Promise.all([listKazooUsers(token), listDeskAgents()]);
+                let existingMap = {};
+                try { existingMap = JSON.parse(cfg.get('kazooUserMap') || "{}"); } catch {}
+        
+                mapContainer.innerHTML = "";
+                agents.forEach(ag => {
+                  const row = document.createElement('div');
+                  row.style.display = 'grid';
+                  row.style.gridTemplateColumns = '1fr 1fr';
+                  row.style.gap = '8px';
+                  row.style.margin = '6px 0';
+        
+                  const label = document.createElement('div');
+                  label.textContent = `${ag.firstName || ''} ${ag.lastName || ''} (${ag.email || ag.id})`;
+        
+                  const sel = document.createElement('select');
+                  users.forEach(u => {
+                    const opt = document.createElement('option');
+                    opt.value = u.id || u._id;
+                    opt.textContent = (u.first_name && u.last_name) ? `${u.first_name} ${u.last_name}` : (u.username || opt.value);
+                    sel.appendChild(opt);
+                  });
+                  if (existingMap[ag.id]) sel.value = existingMap[ag.id];
+        
+                  sel.dataset.agentId = ag.id;
+                  row.appendChild(label);
+                  row.appendChild(sel);
+                  mapContainer.appendChild(row);
+                });
+        
+                el('kzSaveMapping').onclick = async () => {
+                  try {
+                    const selects = mapContainer.querySelectorAll('select');
+                    const map = {};
+                    selects.forEach(s => { if (s.value) map[s.dataset.agentId] = s.value; });
+                    await cfg.setMany([{ name: 'kazooUserMap', value: JSON.stringify(map) }]);
+                    ZOHODESK.showpopup({ title: "Saved", content: "Agent mappings updated.", type: "alert", color: "blue", contentType: "html" });
+                  } catch (e) {
+                    console.error("Save mapping failed", e);
+                    ZOHODESK.showpopup({ title: "Save Error", content: "Could not save mappings.", type: "error", color: "red", contentType: "html" });
+                  }
+                };
+              } catch (e) {
+                console.error("Mapper build failed", e);
+                mapContainer.textContent = "Failed to load agents/users. Check console.";
+              }
+            })();
+          });
+        };
+        </script>
+        
+</body>
+
+</html>
