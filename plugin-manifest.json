@@ -2,7 +2,6 @@
   "locale": ["en"],
   "service": "DESK",
   "storage": true,
-  "type": "personal",
   "modules": {
     "widgets": [
       {
@@ -16,8 +15,8 @@
       {
         "location": "desk.extension.preference",
         "url": "/app/settings.html",
-        "name": "Prefernces",
-        "title": "Prefernces",
+        "name": "Preferences",
+        "title": "Preferences",
         "icon": "/app/img/icon.png",
         "logo": "/app/img/icon.png"
       }
@@ -31,7 +30,7 @@
     "connectionLinkName": "zohodesk2",
     "connectionName": "Zoho Desk",
     "serviceName": "zlabs_integration",
-    "userAccess": false,
+    "userAccess": true,
     "isUserDefinedService": false,
     "sharedBy": "821961013",
     "scope": [
